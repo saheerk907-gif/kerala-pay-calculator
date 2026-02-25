@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kerala Pay Revision Calculator – Estimated 11th PRC</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a1628; }
+  input[type=range] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: rgba(245,166,35,0.3); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #f5a623; cursor: pointer; box-shadow: 0 2px 8px rgba(245,166,35,0.5); }
+  select option { background: #0d2040; color: #e8d5a3; }
+  input:focus, select:focus { border-color: rgba(245,166,35,0.6) !important; box-shadow: 0 0 0 2px rgba(245,166,35,0.15); }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+  ::-webkit-scrollbar-thumb { background: rgba(245,166,35,0.3); border-radius: 3px; }
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr !important; }
+    .tab-label { font-size: 11px !important; }
+    .comparison-table { font-size: 12px !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const PAY_SCALES = [
+  { label: "16500-35700 (LDC / Driver / Peon)", min: 16500, max: 35700, increment: 400 },
+  { label: "17000-37500 (Attender / Helper)", min: 17000, max: 37500, increment: 400 },
+  { label: "18000-41500 (Clerk Gr.II / Similar)", min: 18000, max: 41500, increment: 400 },
+  { label: "19000-43600 (LGS / Office Attendant)", min: 19000, max: 43600, increment: 400 },
+  { label: "20000-45800 (Clerk Gr.I)", min: 20000, max: 45800, increment: 500 },
+  { label: "22200-48000 (UDC / Jr. Superintendent)", min: 22200, max: 48000, increment: 500 },
+  { label: "25200-54000 (Sr. Clerk / Sr. SO)", min: 25200, max: 54000, increment: 600 },
+  { label: "27800-59400 (Assistant / Jr. Supdt.)", min: 27800, max: 59400, increment: 700 },
+  { label: "30700-65400 (Asst. Supdt. / AO)", min: 30700, max: 65400, increment: 800 },
+  { label: "35600-75400 (Supdt. / Dy. Collector)", min: 35600, max: 75400, increment: 900 },
+  { label: "40500-85000 (Section Officer / Equiv.)", min: 40500, max: 85000, increment: 1000 },
+  { label: "45800-89000 (Asst. Director / Equiv.)", min: 45800, max: 89000, increment: 1100 },
+  { label: "54000-102000 (Deputy Director)", min: 54000, max: 102000, increment: 1300 },
+  { label: "63700-114800 (Joint Director)", min: 63700, max: 114800, increment: 1500 },
+  { label: "75600-126200 (Director / IAS Equiv.)", min: 75600, max: 126200, increment: 1800 },
+  { label: "✏ Custom — Enter Manually", min: null, max: null, increment: null },
+];
+
+const REVISED_SCALES = [
+  { min: 42400, max: 91700, increment: 1100 },
+  { min: 43700, max: 96300, increment: 1100 },
+  { min: 46300, max: 106700, increment: 1100 },
+  { min: 48800, max: 112000, increment: 1100 },
+  { min: 51400, max: 117700, increment: 1200 },
+  { min: 57100, max: 123300, increment: 1300 },
+  { min: 64800, max: 138800, increment: 1500 },
+  { min: 71500, max: 152700, increment: 1800 },
+  { min: 79000, max: 168200, increment: 2000 },
+  { min: 91500, max: 193800, increment: 2300 },
+  { min: 104100, max: 218400, increment: 2600 },
+  { min: 117800, max: 228800, increment: 2800 },
+  { min: 138800, max: 262200, increment: 3300 },
+  { min: 163700, max: 295200, increment: 3900 },
+  { min: 194400, max: 324400, increment: 4600 },
+  { min: null, max: null, increment: null },
+];
+
+const HRA_OPTIONS = [
+  { label: "10% – Corporation / Municipal areas", value: 10 },
+  { label: "8% – Town Panchayat / Grade I Panchayat", value: 8 },
+  { label: "6% – Grade II & III Panchayat areas", value: 6 },
+  { label: "4% – Remote / Hill / Tribal areas", value: 4 },
+];
+
+function fmt(n) {
+  return Math.round(n).toLocaleString("en-IN");
+}
+
+function calcIncrPay(basic, incr, count, max) {
+  let p = basic;
+  for (let i = 0; i < count; i++) p = Math.min(p + incr, max || Infinity);
+  return p;
+}
+
+const S = {
+  label: { display:"block", fontSize:"11px", color:"#999", letterSpacing:"0.8px", textTransform:"uppercase", marginBottom:"6px" },
+  input: { width:"100%", background:"rgba(0,0,0,0.35)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:"6px", padding:"9px 12px", color:"#e8d5a3", fontSize:"14px", fontFamily:"Georgia,serif", outline:"none" },
+  select: { width:"100%", background:"rgba(0,0,0,0.35)", border:"1px solid rgba(245,166,35,0.25)", borderRadius:"6px", padding:"9px 12px", color:"#e8d5a3", fontSize:"13px", fontFamily:"Georgia,serif", outline:"none", cursor:"pointer" },
+};
+
+function MiniCard({ label, value, color }) {
+  return (
+    <div style={{ background:"rgba(0,0,0,0.25)", borderRadius:"6px", padding:"8px 10px", border:`1px solid ${color}33` }}>
+      <div style={{ fontSize:"10px", color:"#777", marginBottom:"2px" }}>{label}</div>
+      <div style={{ fontSize:"13px", fontWeight:"bold", color }}>{value}</div>
+    </div>
+  );
+}
+
+function Row({ label, value, type }) {
+  const C = {
+    earning:        { bg:"rgba(46,204,113,0.06)",  border:"rgba(46,204,113,0.18)",  lc:"#ddd",    vc:"#2ecc71" },
+    total:          { bg:"rgba(245,166,35,0.12)",  border:"rgba(245,166,35,0.3)",   lc:"#f5c842", vc:"#f5c842" },
+    deduction:      { bg:"rgba(231,76,60,0.06)",   border:"rgba(231,76,60,0.15)",   lc:"#ddd",    vc:"#e74c3c" },
+    "total-deduct": { bg:"rgba(231,76,60,0.13)",   border:"rgba(231,76,60,0.3)",    lc:"#e74c3c", vc:"#e74c3c" },
+    net:            { bg:"rgba(52,152,219,0.12)",   border:"rgba(52,152,219,0.3)",  lc:"#5dade2", vc:"#5dade2" },
+  }[type] || {};
+  const bold = type === "total" || type === "total-deduct" || type === "net";
+  const prefix = (type === "deduction" || type === "total-deduct") ? "– " : "";
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"9px 14px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:"6px" }}>
+      <span style={{ color:C.lc, fontSize:"13px", fontWeight: bold?"bold":"normal" }}>{label}</span>
+      <span style={{ color:C.vc, fontWeight:"bold", fontSize:"14px" }}>{prefix}₹{fmt(value)}</span>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, sub, color }) {
+  return (
+    <div style={{ background:"rgba(0,0,0,0.25)", border:`1px solid ${color}44`, borderLeft:`4px solid ${color}`, borderRadius:"10px", padding:"16px" }}>
+      <div style={{ fontSize:"11px", color:"#888", letterSpacing:"1px", textTransform:"uppercase", marginBottom:"6px" }}>{label}</div>
+      <div style={{ fontSize:"22px", fontWeight:"bold", color, fontFamily:"Georgia,serif" }}>{value}</div>
+      <div style={{ fontSize:"11px", color:"#777", marginTop:"4px" }}>{sub}</div>
+    </div>
+  );
+}
+
+function App() {
+  const [scaleIdx, setScaleIdx] = useState(2);
+  const [basicPay, setBasicPay] = useState(18000);
+  const [customBasic, setCustomBasic] = useState("");
+  const [customIncr, setCustomIncr] = useState("");
+  const [customMax, setCustomMax] = useState("");
+  const [hraRate, setHraRate] = useState(8);
+  const [daRate, setDaRate] = useState(34);
+  const [fitment, setFitment] = useState(2.57);
+  const [incrsAfter, setIncrsAfter] = useState(0);
+  const [sliRate, setSliRate] = useState(1.5);
+  const [gisAmt, setGisAmt] = useState(800);
+  const [gpfRate, setGpfRate] = useState(6);
+  const [isNPS, setIsNPS] = useState(true);
+  const [revisedDa, setRevisedDa] = useState(0);
+  const [tab, setTab] = useState("current");
+
+  const scale = PAY_SCALES[scaleIdx];
+  const rscale = REVISED_SCALES[scaleIdx];
+  const isCustom = scaleIdx === PAY_SCALES.length - 1;
+
+  const eBasic = isCustom ? (parseFloat(customBasic) || 0) : basicPay;
+  const eIncr  = isCustom ? (parseFloat(customIncr) || 0) : (scale.increment || 0);
+  const eMax   = isCustom ? (parseFloat(customMax) || Infinity) : (scale.max || Infinity);
+
+  // Current
+  const cDA  = eBasic * daRate / 100;
+  const cHRA = eBasic * hraRate / 100;
+  const cGross = eBasic + cDA + cHRA;
+  const cSLI = eBasic * Math.max(sliRate, 1.5) / 100;
+  const cGIS = Math.max(gisAmt, eBasic * 0.015);
+  const cMED = 589;
+  const cNPS = isNPS ? (eBasic + cDA) * 0.10 : 0;
+  const cGPF = !isNPS ? eBasic * Math.max(gpfRate, 6) / 100 : 0;
+  const cDed = cSLI + cGIS + cMED + (isNPS ? cNPS : cGPF);
+  const cNet = cGross - cDed;
+
+  // Revised
+  const rawRevBasic = eBasic * fitment;
+  let revBasic = rawRevBasic;
+  if (!isCustom && rscale && rscale.min) {
+    revBasic = Math.max(rscale.min, Math.round(rawRevBasic / 100) * 100);
+    revBasic = Math.min(revBasic, rscale.max);
+  } else {
+    revBasic = Math.round(rawRevBasic / 100) * 100;
+  }
+  const rIncr = (!isCustom && rscale && rscale.increment) ? rscale.increment : Math.round(eIncr * fitment);
+  const rMax  = (!isCustom && rscale && rscale.max) ? rscale.max : Infinity;
+  const revBasicFinal = calcIncrPay(revBasic, rIncr, incrsAfter, rMax);
+
+  const rDA  = revBasicFinal * revisedDa / 100;
+  const rHRA = revBasicFinal * hraRate / 100;
+  const rGross = revBasicFinal + rDA + rHRA;
+  const rSLI = revBasicFinal * Math.max(sliRate, 1.5) / 100;
+  const rGIS = Math.max(gisAmt, revBasicFinal * 0.015);
+  const rMED = 589;
+  const rNPS = isNPS ? (revBasicFinal + rDA) * 0.10 : 0;
+  const rGPF = !isNPS ? revBasicFinal * Math.max(gpfRate, 6) / 100 : 0;
+  const rDed = rSLI + rGIS + rMED + (isNPS ? rNPS : rGPF);
+  const rNet = rGross - rDed;
+
+  const netBen = rNet - cNet;
+  const grsBen = rGross - cGross;
+
+  return (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0a1628 0%,#0d2040 40%,#0a3060 100%)", fontFamily:"Georgia,'Times New Roman',serif", color:"#e8d5a3", padding:"16px" }}>
+
+      {/* Header */}
+      <div style={{ textAlign:"center", marginBottom:"22px", paddingTop:"8px" }}>
+        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:"14px", marginBottom:"10px", flexWrap:"wrap" }}>
+          <div style={{ width:"52px", height:"52px", borderRadius:"50%", background:"linear-gradient(135deg,#f5a623,#d4841a)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"24px", boxShadow:"0 4px 15px rgba(245,166,35,0.4)", flexShrink:0 }}>⚖</div>
+          <div>
+            <h1 style={{ fontSize:"clamp(16px,4vw,26px)", fontWeight:"bold", color:"#f5c842", letterSpacing:"1px", textShadow:"0 2px 8px rgba(0,0,0,0.5)" }}>KERALA GOVERNMENT</h1>
+            <h2 style={{ fontSize:"clamp(11px,2.5vw,16px)", fontWeight:"normal", color:"#e8d5a3", letterSpacing:"2px" }}>PAY REVISION CALCULATOR — ESTIMATED 11th PRC</h2>
+          </div>
+        </div>
+        <div style={{ background:"rgba(245,166,35,0.12)", border:"1px solid rgba(245,166,35,0.3)", borderRadius:"6px", padding:"8px 16px", display:"inline-block", fontSize:"11px", color:"#f5c842" }}>
+          ⚠ ESTIMATED — Based on projected fitment. Actual figures pending official Gazette Notification.
+        </div>
+      </div>
+
+      <div style={{ maxWidth:"1100px", margin:"0 auto" }}>
+
+        {/* Main two-column grid */}
+        <div className="main-grid" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"18px", marginBottom:"18px" }}>
+
+          {/* LEFT: Employee Details */}
+          <div style={{ background:"rgba(255,255,255,0.04)", borderRadius:"12px", border:"1px solid rgba(245,166,35,0.2)", padding:"20px" }}>
+            <h3 style={{ fontSize:"12px", letterSpacing:"2px", color:"#f5c842", textTransform:"uppercase", borderBottom:"1px solid rgba(245,166,35,0.2)", paddingBottom:"10px", marginBottom:"16px" }}>📋 Employee Details</h3>
+
+            {/* Pay Scale */}
+            <div style={{ marginBottom:"14px" }}>
+              <label style={S.label}>Pay Scale (10th PRC)</label>
+              <select value={scaleIdx} onChange={e => { const i=parseInt(e.target.value); setScaleIdx(i); if(i!==PAY_SCALES.length-1) setBasicPay(PAY_SCALES[i].min); }} style={S.select}>
+                {PAY_SCALES.map((s,i)=><option key={i} value={i}>{s.label}</option>)}
+              </select>
+            </div>
+
+            {isCustom ? (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"8px", marginBottom:"14px" }}>
+                <div><label style={S.label}>Basic Pay (₹)</label><input type="number" value={customBasic} onChange={e=>setCustomBasic(e.target.value)} style={S.input} placeholder="25000"/></div>
+                <div><label style={S.label}>Increment (₹)</label><input type="number" value={customIncr} onChange={e=>setCustomIncr(e.target.value)} style={S.input} placeholder="600"/></div>
+                <div><label style={S.label}>Scale Max (₹)</label><input type="number" value={customMax} onChange={e=>setCustomMax(e.target.value)} style={S.input} placeholder="54000"/></div>
+              </div>
+            ) : (
+              <div style={{ marginBottom:"14px" }}>
+                <label style={S.label}>Basic Pay as on 01.07.2024 (₹)</label>
+                <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
+                  <input type="number" value={basicPay} min={scale.min} max={scale.max} step={scale.increment} onChange={e=>setBasicPay(parseInt(e.target.value)||scale.min)} style={{...S.input, flex:1}}/>
+                  <span style={{ fontSize:"11px", color:"#888", whiteSpace:"nowrap" }}>Max: ₹{fmt(scale.max)}</span>
+                </div>
+                <input type="range" min={scale.min} max={scale.max} step={scale.increment} value={basicPay} onChange={e=>setBasicPay(parseInt(e.target.value))} style={{ width:"100%", marginTop:"8px" }}/>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"10px", color:"#666", marginTop:"2px" }}>
+                  <span>₹{fmt(scale.min)}</span><span>₹{fmt(scale.max)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* HRA */}
+            <div style={{ marginBottom:"14px" }}>
+              <label style={S.label}>HRA Category</label>
+              <select value={hraRate} onChange={e=>setHraRate(parseInt(e.target.value))} style={S.select}>
+                {HRA_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            {/* Increments after 01.07.2024 */}
+            <div style={{ marginBottom:"14px", background:"rgba(245,166,35,0.07)", borderRadius:"8px", padding:"12px", border:"1px solid rgba(245,166,35,0.2)" }}>
+              <label style={{...S.label, color:"#f5c842"}}>🔼 Increments Due After 01.07.2024</label>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px", marginTop:"8px" }}>
+                <button onClick={()=>setIncrsAfter(Math.max(0,incrsAfter-1))} style={{ width:"34px", height:"34px", background:"rgba(245,166,35,0.15)", border:"1px solid rgba(245,166,35,0.4)", borderRadius:"8px", color:"#f5c842", fontSize:"20px", cursor:"pointer", lineHeight:"1" }}>−</button>
+                <div style={{ textAlign:"center", minWidth:"50px", fontSize:"24px", fontWeight:"bold", color:"#f5c842" }}>{incrsAfter}</div>
+                <button onClick={()=>setIncrsAfter(incrsAfter+1)} style={{ width:"34px", height:"34px", background:"rgba(245,166,35,0.15)", border:"1px solid rgba(245,166,35,0.4)", borderRadius:"8px", color:"#f5c842", fontSize:"20px", cursor:"pointer", lineHeight:"1" }}>+</button>
+                <span style={{ fontSize:"11px", color:"#888" }}>Each = +₹{fmt(rIncr)} on revised basic</span>
+              </div>
+              <p style={{ fontSize:"11px", color:"#777", marginTop:"8px" }}>Add 1 increment for each July anniversary that falls after 01.07.2024 up to the current date.</p>
+            </div>
+
+            {/* DA */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"14px" }}>
+              <div><label style={S.label}>Current DA (%)</label><input type="number" value={daRate} step="0.5" onChange={e=>setDaRate(parseFloat(e.target.value)||0)} style={S.input}/></div>
+              <div><label style={S.label}>Revised DA (%)</label><input type="number" value={revisedDa} step="0.5" onChange={e=>setRevisedDa(parseFloat(e.target.value)||0)} style={S.input}/></div>
+            </div>
+
+            {/* Fitment */}
+            <div style={{ marginBottom:"6px" }}>
+              <label style={S.label}>Estimated Fitment Factor (×)</label>
+              <input type="number" value={fitment} step="0.01" min="1" onChange={e=>setFitment(parseFloat(e.target.value)||1)} style={S.input}/>
+              <p style={{ fontSize:"11px", color:"#777", marginTop:"4px" }}>Default 2.57× based on typical PRC trend. Update when officially announced.</p>
+            </div>
+          </div>
+
+          {/* RIGHT: Deductions */}
+          <div style={{ background:"rgba(255,255,255,0.04)", borderRadius:"12px", border:"1px solid rgba(245,166,35,0.2)", padding:"20px" }}>
+            <h3 style={{ fontSize:"12px", letterSpacing:"2px", color:"#f5c842", textTransform:"uppercase", borderBottom:"1px solid rgba(245,166,35,0.2)", paddingBottom:"10px", marginBottom:"16px" }}>📉 Deduction Settings</h3>
+
+            {/* Pension toggle */}
+            <div style={{ marginBottom:"16px", background:"rgba(0,0,0,0.2)", borderRadius:"8px", padding:"12px" }}>
+              <label style={{...S.label, marginBottom:"10px"}}>Pension Scheme</label>
+              <div style={{ display:"flex", gap:"8px" }}>
+                <button onClick={()=>setIsNPS(true)} style={{ flex:1, padding:"10px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontFamily:"Georgia,serif", background: isNPS?"linear-gradient(135deg,#1a6b3c,#145c32)":"rgba(255,255,255,0.04)", border: isNPS?"1px solid #2ecc71":"1px solid rgba(255,255,255,0.1)", color: isNPS?"#2ecc71":"#888" }}>
+                  NPS (New Pension)
+                </button>
+                <button onClick={()=>setIsNPS(false)} style={{ flex:1, padding:"10px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontFamily:"Georgia,serif", background: !isNPS?"linear-gradient(135deg,#1a3d6b,#0d2e5c)":"rgba(255,255,255,0.04)", border: !isNPS?"1px solid #3498db":"1px solid rgba(255,255,255,0.1)", color: !isNPS?"#5dade2":"#888" }}>
+                  GPF (Old Pension)
+                </button>
+              </div>
+            </div>
+
+            {/* SLI */}
+            <div style={{ marginBottom:"14px" }}>
+              <label style={S.label}>SLI Rate (% of Basic) — Min 1.5%</label>
+              <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+                <input type="number" value={sliRate} min="1.5" step="0.1" onChange={e=>setSliRate(Math.max(1.5,parseFloat(e.target.value)||1.5))} style={{...S.input, flex:1}}/>
+                <span style={{ fontSize:"12px", color:"#888", whiteSpace:"nowrap" }}>= ₹{fmt(cSLI)}</span>
+              </div>
+            </div>
+
+            {/* GIS */}
+            <div style={{ marginBottom:"14px" }}>
+              <label style={S.label}>GIS Amount (₹) — Min ₹800 or 1.5% of Basic</label>
+              <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+                <input type="number" value={gisAmt} min="800" step="50" onChange={e=>setGisAmt(Math.max(800,parseFloat(e.target.value)||800))} style={{...S.input, flex:1}}/>
+                <span style={{ fontSize:"12px", color:"#888", whiteSpace:"nowrap" }}>Eff: ₹{fmt(cGIS)}</span>
+              </div>
+            </div>
+
+            {/* MEDISEP */}
+            <div style={{ marginBottom:"14px", display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"rgba(52,152,219,0.07)", border:"1px solid rgba(52,152,219,0.2)", borderRadius:"8px" }}>
+              <span style={{ fontSize:"13px", color:"#aaa" }}>MEDISEP (Fixed)</span>
+              <span style={{ color:"#5dade2", fontWeight:"bold", fontSize:"15px" }}>₹589 / month</span>
+            </div>
+
+            {/* NPS / GPF detail */}
+            {isNPS ? (
+              <div style={{ marginBottom:"14px", background:"rgba(46,204,113,0.07)", borderRadius:"8px", padding:"12px", border:"1px solid rgba(46,204,113,0.2)" }}>
+                <div style={{ fontSize:"12px", color:"#2ecc71", marginBottom:"8px", letterSpacing:"0.5px" }}>NPS — 10% of (Basic + DA)</div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"13px" }}>
+                  <span style={{ color:"#aaa" }}>Current NPS:</span><span style={{ color:"#2ecc71", fontWeight:"bold" }}>₹{fmt(cNPS)}</span>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:"13px", marginTop:"4px" }}>
+                  <span style={{ color:"#aaa" }}>Revised NPS:</span><span style={{ color:"#2ecc71", fontWeight:"bold" }}>₹{fmt(rNPS)}</span>
+                </div>
+                <p style={{ fontSize:"11px", color:"#777", marginTop:"6px" }}>Government also contributes matching 10% (not deducted from salary).</p>
+              </div>
+            ) : (
+              <div style={{ marginBottom:"14px" }}>
+                <label style={S.label}>GPF Rate (% of Basic) — Min 6%</label>
+                <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+                  <input type="number" value={gpfRate} min="6" step="1" onChange={e=>setGpfRate(Math.max(6,parseFloat(e.target.value)||6))} style={{...S.input, flex:1}}/>
+                  <span style={{ fontSize:"12px", color:"#888", whiteSpace:"nowrap" }}>= ₹{fmt(cGPF)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Summary */}
+            <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:"10px", padding:"14px", border:"1px solid rgba(245,166,35,0.15)", marginTop:"6px" }}>
+              <div style={{ fontSize:"11px", color:"#f5c842", marginBottom:"10px", letterSpacing:"1px" }}>📊 QUICK COMPARISON</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"7px" }}>
+                <MiniCard label="Current Basic" value={`₹${fmt(eBasic)}`} color="#aaa"/>
+                <MiniCard label="Revised Basic" value={`₹${fmt(revBasicFinal)}`} color="#f5c842"/>
+                <MiniCard label="Current Gross" value={`₹${fmt(cGross)}`} color="#aaa"/>
+                <MiniCard label="Revised Gross" value={`₹${fmt(rGross)}`} color="#f5c842"/>
+                <MiniCard label="Current Net" value={`₹${fmt(cNet)}`} color="#e74c3c"/>
+                <MiniCard label="Revised Net" value={`₹${fmt(rNet)}`} color="#2ecc71"/>
+              </div>
+              <div style={{ marginTop:"12px", textAlign:"center", padding:"10px", background:"linear-gradient(135deg,rgba(46,204,113,0.13),rgba(245,166,35,0.13))", borderRadius:"8px", border:"1px solid rgba(46,204,113,0.3)" }}>
+                <div style={{ fontSize:"11px", color:"#aaa" }}>Estimated Monthly Net Benefit</div>
+                <div style={{ fontSize:"26px", fontWeight:"bold", color:"#2ecc71" }}>+₹{fmt(netBen)}</div>
+                <div style={{ fontSize:"11px", color:"#888" }}>Annual Benefit: ₹{fmt(netBen*12)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Breakdown Tabs */}
+        <div style={{ background:"rgba(255,255,255,0.04)", borderRadius:"12px", border:"1px solid rgba(245,166,35,0.2)", overflow:"hidden" }}>
+          <div style={{ display:"flex", borderBottom:"1px solid rgba(245,166,35,0.2)" }}>
+            {[["current","📋 Current Pay"],["revised","📈 Revised Pay"],["comparison","⚖ Comparison"]].map(([t,l])=>(
+              <button key={t} className="tab-label" onClick={()=>setTab(t)} style={{ flex:1, padding:"13px 6px", border:"none", cursor:"pointer", fontSize:"13px", letterSpacing:"0.5px", textTransform:"uppercase", fontFamily:"Georgia,serif", background: tab===t?"rgba(245,166,35,0.12)":"transparent", color: tab===t?"#f5c842":"#777", borderBottom: tab===t?"2px solid #f5c842":"2px solid transparent", transition:"all 0.2s" }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ padding:"22px" }}>
+            {tab==="current" && (
+              <div>
+                <h4 style={{ color:"#f5c842", fontSize:"14px", letterSpacing:"1px", marginBottom:"14px" }}>Current Pay Structure — as on 01.07.2024</h4>
+                <div style={{ display:"grid", gap:"6px" }}>
+                  <Row label="Basic Pay" value={eBasic} type="earning"/>
+                  <Row label={`Dearness Allowance (DA @ ${daRate}%)`} value={cDA} type="earning"/>
+                  <Row label={`House Rent Allowance (HRA @ ${hraRate}%)`} value={cHRA} type="earning"/>
+                  <Row label="GROSS SALARY" value={cGross} type="total"/>
+                  <Row label={`SLI (@ ${Math.max(sliRate,1.5)}% of Basic)`} value={cSLI} type="deduction"/>
+                  <Row label="GIS" value={cGIS} type="deduction"/>
+                  <Row label="MEDISEP" value={cMED} type="deduction"/>
+                  <Row label={isNPS?"NPS @ 10% of (Basic+DA)":`GPF @ ${Math.max(gpfRate,6)}%`} value={isNPS?cNPS:cGPF} type="deduction"/>
+                  <Row label="TOTAL DEDUCTIONS" value={cDed} type="total-deduct"/>
+                  <Row label="NET TAKE-HOME PAY" value={cNet} type="net"/>
+                </div>
+              </div>
+            )}
+
+            {tab==="revised" && (
+              <div>
+                <div style={{ background:"rgba(245,166,35,0.08)", borderRadius:"8px", padding:"12px", border:"1px solid rgba(245,166,35,0.2)", marginBottom:"16px", display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:"12px" }}>
+                  <div><div style={{ fontSize:"10px", color:"#888" }}>FITMENT APPLIED</div><div style={{ fontSize:"15px", color:"#f5c842", fontWeight:"bold" }}>{fitment}× of ₹{fmt(eBasic)}</div></div>
+                  <div><div style={{ fontSize:"10px", color:"#888" }}>FITTED BASIC</div><div style={{ fontSize:"15px", color:"#f5c842", fontWeight:"bold" }}>₹{fmt(revBasic)}</div></div>
+                  <div><div style={{ fontSize:"10px", color:"#888" }}>AFTER {incrsAfter} INCREMENT(S)</div><div style={{ fontSize:"15px", color:"#f5c842", fontWeight:"bold" }}>₹{fmt(revBasicFinal)}</div></div>
+                  {!isCustom && rscale && <div><div style={{ fontSize:"10px", color:"#888" }}>REVISED SCALE</div><div style={{ fontSize:"12px", color:"#f5c842" }}>₹{fmt(rscale.min)} – ₹{fmt(rscale.max)}</div></div>}
+                </div>
+                <h4 style={{ color:"#f5c842", fontSize:"14px", letterSpacing:"1px", marginBottom:"14px" }}>Estimated Revised Pay Structure</h4>
+                <div style={{ display:"grid", gap:"6px" }}>
+                  <Row label="Revised Basic Pay" value={revBasicFinal} type="earning"/>
+                  <Row label={`DA @ ${revisedDa}% (Revised Rate)`} value={rDA} type="earning"/>
+                  <Row label={`HRA @ ${hraRate}%`} value={rHRA} type="earning"/>
+                  <Row label="REVISED GROSS SALARY" value={rGross} type="total"/>
+                  <Row label={`SLI (@ ${Math.max(sliRate,1.5)}%)`} value={rSLI} type="deduction"/>
+                  <Row label="GIS" value={rGIS} type="deduction"/>
+                  <Row label="MEDISEP" value={rMED} type="deduction"/>
+                  <Row label={isNPS?"NPS @ 10% of (Basic+DA)":`GPF @ ${Math.max(gpfRate,6)}%`} value={isNPS?rNPS:rGPF} type="deduction"/>
+                  <Row label="TOTAL DEDUCTIONS" value={rDed} type="total-deduct"/>
+                  <Row label="REVISED NET TAKE-HOME" value={rNet} type="net"/>
+                </div>
+              </div>
+            )}
+
+            {tab==="comparison" && (
+              <div>
+                <div style={{ overflowX:"auto" }}>
+                  <table className="comparison-table" style={{ width:"100%", borderCollapse:"collapse", fontSize:"13px" }}>
+                    <thead>
+                      <tr>
+                        {["Component","Current (₹)","Revised (₹)","Difference (₹)","Change (%)"].map((h,i)=>(
+                          <th key={i} style={{ padding:"10px 12px", textAlign: i===0?"left":"right", fontSize:"11px", letterSpacing:"1px", textTransform:"uppercase", background:"rgba(0,0,0,0.3)", borderBottom:"1px solid rgba(245,166,35,0.2)", fontWeight:"normal", color:["#ddd","#aaa","#f5c842","#2ecc71","#5dade2"][i] }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ["Basic Pay",                  eBasic,   revBasicFinal],
+                        [`DA (${daRate}%→${revisedDa}%)`, cDA,  rDA],
+                        [`HRA (${hraRate}%)`,           cHRA,    rHRA],
+                        ["GROSS SALARY",                cGross,  rGross],
+                        ["SLI",                         cSLI,    rSLI],
+                        ["GIS",                         cGIS,    rGIS],
+                        ["MEDISEP",                     cMED,    rMED],
+                        [isNPS?"NPS":"GPF",             isNPS?cNPS:cGPF, isNPS?rNPS:rGPF],
+                        ["TOTAL DEDUCTIONS",            cDed,    rDed],
+                        ["NET TAKE-HOME",               cNet,    rNet],
+                      ].map(([lbl,cur,rev],i)=>{
+                        const diff = rev-cur;
+                        const pct  = cur>0 ? ((diff/cur)*100).toFixed(1) : "—";
+                        const hi   = lbl.includes("GROSS")||lbl.includes("NET")||lbl.includes("TOTAL");
+                        return (
+                          <tr key={i} style={{ background: hi?"rgba(245,166,35,0.06)":"transparent", borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                            <td style={{ padding:"9px 12px", fontWeight:hi?"bold":"normal", color:hi?"#f5c842":"#ddd" }}>{lbl}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color:"#aaa" }}>{fmt(cur)}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color:"#f5c842", fontWeight:hi?"bold":"normal" }}>{fmt(rev)}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color:diff>=0?"#2ecc71":"#e74c3c", fontWeight:"bold" }}>{diff>=0?"+":""}{fmt(diff)}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", color:diff>=0?"#5dade2":"#e74c3c" }}>{diff>=0?"+":""}{pct}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:"14px", marginTop:"20px" }}>
+                  <SummaryCard label="Monthly Gross Benefit" value={`+₹${fmt(grsBen)}`} sub={`${((grsBen/cGross)*100).toFixed(1)}% increase in gross`} color="#f5c842"/>
+                  <SummaryCard label="Monthly Net Benefit" value={`+₹${fmt(netBen)}`} sub={`${((netBen/cNet)*100).toFixed(1)}% increase in net`} color="#2ecc71"/>
+                  <SummaryCard label="Annual Net Benefit" value={`₹${fmt(netBen*12)}`} sub="Additional income per year" color="#5dade2"/>
+                  <SummaryCard label="Arrears (est. 18 months)" value={`₹${fmt(netBen*18)}`} sub="Jul 2024 – Dec 2025 estimate" color="#e67e22"/>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ textAlign:"center", marginTop:"18px", fontSize:"11px", color:"rgba(232,213,163,0.35)", paddingBottom:"20px", lineHeight:"1.8" }}>
+          This is an ESTIMATED calculator for planning purposes only.<br/>
+          Actual pay revision figures will be as per official Kerala Gazette Notification.<br/>
+          Consult your DDO / Treasury Officer for official calculations.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>, document.getElementById("root"));
+</script>
+</body>
+</html>
